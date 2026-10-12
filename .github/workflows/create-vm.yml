@@ -5,10 +5,16 @@ on:
   schedule:
     - cron: '0 */6 * * *'
 
+permissions:
+  actions: write
+
 jobs:
   create-vm:
     runs-on: ubuntu-latest
     timeout-minutes: 360
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
     steps:
       - name: Install OCI CLI
         run: pip install oci-cli
@@ -19,20 +25,20 @@ jobs:
           echo "${{ secrets.OCI_KEY }}" > ~/.oci/private_key.pem
           chmod 600 ~/.oci/private_key.pem
           cat > ~/.oci/config << OCIEOF
-[DEFAULT]
-user=ocid1.user.oc1..aaaaaaaamlymwykbaf74ovbnpyo2qrx6gr7h54vqvkhaxk657jrd3udp32nq
-fingerprint=7f:26:e9:93:9b:9f:5b:be:6e:c7:52:f4:75:bf:8e:c0
-tenancy=ocid1.tenancy.oc1..aaaaaaaaj4ugmjpgqesvhpeqwndw3m32ytcqqgjvzn2ezubc7djwoanmggrq
-region=ap-singapore-1
-key_file=~/.oci/private_key.pem
-OCIEOF
+          [DEFAULT]
+          user=ocid1.user.oc1..aaaaaaaamlymwykbaf74ovbnpyo2qrx6gr7h54vqvkhaxk657jrd3udp32nq
+          fingerprint=7f:26:e9:93:9b:9f:5b:be:6e:c7:52:f4:75:bf:8e:c0
+          tenancy=ocid1.tenancy.oc1..aaaaaaaaj4ugmjpgqesvhpeqwndw3m32ytcqqgjvzn2ezubc7djwoanmggrq
+          region=ap-singapore-1
+          key_file=~/.oci/private_key.pem
+          OCIEOF
 
       - name: Loop Until VM Created
         run: |
           while true; do
             echo "$(date) - กำลังลอง..."
-            
-            RESULT=$(oci compute instance launch \
+
+            if RESULT=$(oci compute instance launch \
               --availability-domain "rZDR:AP-SINGAPORE-1-AD-1" \
               --compartment-id "ocid1.tenancy.oc1..aaaaaaaaj4ugmjpgqesvhpeqwndw3m32ytcqqgjvzn2ezubc7djwoanmggrq" \
               --shape "VM.Standard.A1.Flex" \
@@ -40,15 +46,14 @@ OCIEOF
               --subnet-id "ocid1.subnet.oc1.ap-singapore-1.aaaaaaaabedf3ev4ty5eekhvis7rghtlk34x2ce2rdwmx6f5shopd7zojqaa" \
               --image-id "ocid1.image.oc1.ap-singapore-1.aaaaaaaa4rgzowsv4u6hk6ugkk2be7ztbowlxwnonuvsxq4d73yjy4fc22ka" \
               --display-name "android-cloud" \
-              --assign-public-ip true 2>&1)
-            
-            echo "$RESULT"
-            
-            if echo "$RESULT" | grep -q "lifecycleState"; then
-              echo "✅ สร้าง VM สำเร็จ!"
+              --assign-public-ip true 2>&1); then
+              echo "$RESULT"
+              echo "สร้าง VM สำเร็จ! ปิด workflow นี้แล้ว"
+              gh workflow disable create-vm.yml
               break
             else
-              echo "❌ Capacity เต็ม รอ 5 นาที..."
+              echo "$RESULT"
+              echo "Capacity เต็ม รอ 5 นาที..."
               sleep 300
             fi
           done
